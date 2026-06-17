@@ -1,13 +1,15 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
 from django.contrib.auth.password_validation import validate_password
-from .models import Poll, Option, Vote
+from .models import Poll, Option, Vote, UserActivity
 
 
 class UserSerializer(serializers.ModelSerializer):
+    is_staff = serializers.BooleanField(read_only=True)
+
     class Meta:
         model = User
-        fields = ['id', 'username', 'email']
+        fields = ['id', 'username', 'email', 'is_staff']
 
 
 class RegisterSerializer(serializers.ModelSerializer):
@@ -49,11 +51,13 @@ class PollListSerializer(serializers.ModelSerializer):
     creator = UserSerializer(read_only=True)
     total_votes = serializers.IntegerField(read_only=True)
     has_voted = serializers.BooleanField(read_only=True)
+    status = serializers.CharField(read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
 
     class Meta:
         model = Poll
         fields = ['id', 'title', 'description', 'creator', 'created_at', 'end_time',
-                  'is_active', 'allow_multiple', 'total_votes', 'has_voted']
+                  'is_active', 'allow_multiple', 'total_votes', 'has_voted', 'status', 'status_display']
 
 
 class PollDetailSerializer(serializers.ModelSerializer):
@@ -62,11 +66,14 @@ class PollDetailSerializer(serializers.ModelSerializer):
     total_votes = serializers.IntegerField(read_only=True)
     has_voted = serializers.BooleanField(read_only=True)
     user_votes = serializers.ListField(read_only=True)
+    status = serializers.CharField(read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
 
     class Meta:
         model = Poll
         fields = ['id', 'title', 'description', 'creator', 'created_at', 'end_time',
-                  'is_active', 'allow_multiple', 'options', 'total_votes', 'has_voted', 'user_votes']
+                  'is_active', 'allow_multiple', 'options', 'total_votes', 'has_voted', 'user_votes',
+                  'status', 'status_display']
 
 
 class PollCreateSerializer(serializers.ModelSerializer):
@@ -97,6 +104,8 @@ class VoteCreateSerializer(serializers.Serializer):
 
     def validate(self, attrs):
         poll = self.context['poll']
+        if poll.status != Poll.STATUS_APPROVED:
+            raise serializers.ValidationError("This poll has not been approved yet.")
         if not poll.is_active:
             raise serializers.ValidationError("This poll is not active.")
         if poll.end_time and poll.end_time < poll.end_time.now():
@@ -111,3 +120,28 @@ class PollResultSerializer(serializers.ModelSerializer):
     class Meta:
         model = Poll
         fields = ['id', 'title', 'description', 'options', 'total_votes']
+
+
+class AdminPollSerializer(serializers.ModelSerializer):
+    creator = UserSerializer(read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    total_votes = serializers.IntegerField(read_only=True)
+    options = OptionSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Poll
+        fields = ['id', 'title', 'description', 'creator', 'created_at', 'end_time',
+                  'is_active', 'allow_multiple', 'status', 'status_display',
+                  'reviewed_at', 'reject_reason', 'total_votes', 'options']
+        read_only_fields = ['id', 'creator', 'created_at', 'reviewed_at', 'total_votes', 'options']
+
+
+class DashboardStatsSerializer(serializers.Serializer):
+    total_users = serializers.IntegerField()
+    total_polls = serializers.IntegerField()
+    active_users = serializers.IntegerField()
+    pending_polls = serializers.IntegerField()
+    approved_polls = serializers.IntegerField()
+    rejected_polls = serializers.IntegerField()
+    total_votes = serializers.IntegerField()
+

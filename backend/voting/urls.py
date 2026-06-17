@@ -4,7 +4,12 @@ from rest_framework_simplejwt.views import (
     TokenObtainPairView,
     TokenRefreshView,
 )
-from .views import RegisterView, UserDetailView, PollViewSet, VoteView
+from .views import (
+    RegisterView, UserDetailView, PollViewSet, VoteView,
+    AdminPollListView, AdminPollDetailView,
+    AdminApprovePollView, AdminRejectPollView,
+    AdminDashboardView
+)
 
 router = DefaultRouter()
 router.register(r'polls', PollViewSet, basename='poll')
@@ -16,4 +21,10 @@ urlpatterns = [
     path('auth/user/', UserDetailView.as_view(), name='user_detail'),
     path('', include(router.urls)),
     path('polls/<int:poll_id>/vote/', VoteView.as_view(), name='vote'),
+
+    path('admin/polls/', AdminPollListView.as_view(), name='admin_poll_list'),
+    path('admin/polls/<int:poll_id>/', AdminPollDetailView.as_view(), name='admin_poll_detail'),
+    path('admin/polls/<int:poll_id>/approve/', AdminApprovePollView.as_view(), name='admin_approve_poll'),
+    path('admin/polls/<int:poll_id>/reject/', AdminRejectPollView.as_view(), name='admin_reject_poll'),
+    path('admin/dashboard/', AdminDashboardView.as_view(), name='admin_dashboard'),
 ]

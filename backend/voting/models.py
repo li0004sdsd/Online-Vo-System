@@ -3,6 +3,16 @@ from django.contrib.auth.models import User
 
 
 class Poll(models.Model):
+    STATUS_PENDING = 'pending'
+    STATUS_APPROVED = 'approved'
+    STATUS_REJECTED = 'rejected'
+
+    STATUS_CHOICES = [
+        (STATUS_PENDING, '待审核'),
+        (STATUS_APPROVED, '已通过'),
+        (STATUS_REJECTED, '已删除'),
+    ]
+
     title = models.CharField(max_length=200)
     description = models.TextField(blank=True)
     creator = models.ForeignKey(User, on_delete=models.CASCADE, related_name='polls')
@@ -10,6 +20,10 @@ class Poll(models.Model):
     end_time = models.DateTimeField(null=True, blank=True)
     is_active = models.BooleanField(default=True)
     allow_multiple = models.BooleanField(default=False)
+
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDING)
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    reject_reason = models.TextField(blank=True)
 
     class Meta:
         ordering = ['-created_at']
@@ -38,3 +52,11 @@ class Vote(models.Model):
 
     def __str__(self):
         return f'{self.user.username} voted for {self.option.text}'
+
+
+class UserActivity(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='activity')
+    last_active = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f'{self.user.username} - last active: {self.last_active}'
