@@ -6,7 +6,7 @@ from rest_framework.decorators import action
 from django.contrib.auth.models import User
 from django.db.models import Count, Prefetch
 from django.utils import timezone
-from datetime import timedelta
+from datetime import timedelta, datetime
 from .models import Poll, Option, Vote, UserActivity
 from .serializers import (
     UserSerializer, RegisterSerializer,
@@ -259,6 +259,9 @@ class AdminDashboardView(APIView):
         if active_users == 0:
             active_users = min(total_users, 5)
 
+        poll_trend = self._get_poll_trend()
+        vote_trend = self._get_vote_trend()
+
         data = {
             'total_users': total_users,
             'total_polls': total_polls,
@@ -267,7 +270,43 @@ class AdminDashboardView(APIView):
             'approved_polls': approved_polls,
             'rejected_polls': rejected_polls,
             'total_votes': total_votes,
+            'poll_trend': poll_trend,
+            'vote_trend': vote_trend,
         }
 
         serializer = DashboardStatsSerializer(data)
         return Response(serializer.data)
+
+    def _get_poll_trend(self):
+        today = timezone.now().date()
+        trend = []
+        for i in range(6, -1, -1):
+            date = today - timedelta(days=i)
+            date_start = timezone.make_aware(datetime.combine(date, datetime.min.time()))
+            date_end = date_start + timedelta(days=1)
+            count = Poll.objects.filter(
+                created_at__gte=date_start,
+                created_at__lt=date_end
+            ).count()
+            trend.append({
+                'date': date.strftime('%m-%d'),
+                'count': count
+            })
+        return trend
+
+    def _get_vote_trend(self):
+        today = timezone.now().date()
+        trend = []
+        for i in range(6, -1, -1):
+            date = today - timedelta(days=i)
+            date_start = timezone.make_aware(datetime.combine(date, datetime.min.time()))
+            date_end = date_start + timedelta(days=1)
+            count = Vote.objects.filter(
+                voted_at__gte=date_start,
+                voted_at__lt=date_end
+            ).count()
+            trend.append({
+                'date': date.strftime('%m-%d'),
+                'count': count
+            })
+        return trend

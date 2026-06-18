@@ -92,11 +92,24 @@
         </el-card>
       </el-col>
     </el-row>
+
+    <el-row :gutter="20" style="margin-top: 24px;">
+      <el-col :span="24">
+        <el-card shadow="hover">
+          <template #header>
+            <div class="card-header">
+              <span>近7天投票趋势</span>
+            </div>
+          </template>
+          <div ref="trendChartRef" class="trend-chart"></div>
+        </el-card>
+      </el-col>
+    </el-row>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, nextTick } from 'vue'
+import { ref, onMounted, nextTick, onBeforeUnmount } from 'vue'
 import { ElMessage } from 'element-plus'
 import * as echarts from 'echarts'
 import { getDashboardStats } from '@/api/admin'
@@ -108,24 +121,29 @@ const stats = ref({
   pending_polls: 0,
   approved_polls: 0,
   rejected_polls: 0,
-  total_votes: 0
+  total_votes: 0,
+  poll_trend: [],
+  vote_trend: []
 })
 
 const statusChartRef = ref(null)
+const trendChartRef = ref(null)
 let statusChart = null
+let trendChart = null
 
 async function loadStats() {
   try {
     const data = await getDashboardStats()
     stats.value = data
     await nextTick()
-    initChart()
+    initStatusChart()
+    initTrendChart()
   } catch (error) {
     ElMessage.error('加载统计数据失败')
   }
 }
 
-function initChart() {
+function initStatusChart() {
   if (!statusChartRef.value) return
 
   if (statusChart) {
@@ -181,12 +199,107 @@ function initChart() {
   statusChart.setOption(option)
 }
 
+function initTrendChart() {
+  if (!trendChartRef.value) return
+
+  if (trendChart) {
+    trendChart.dispose()
+  }
+
+  trendChart = echarts.init(trendChartRef.value)
+
+  const pollTrend = stats.value.poll_trend || []
+  const voteTrend = stats.value.vote_trend || []
+  const dates = pollTrend.map(item => item.date)
+  const pollCounts = pollTrend.map(item => item.count)
+  const voteCounts = voteTrend.map(item => item.count)
+
+  const option = {
+    tooltip: {
+      trigger: 'axis'
+    },
+    legend: {
+      data: ['新增投票', '投票次数'],
+      top: 0
+    },
+    grid: {
+      left: '3%',
+      right: '4%',
+      bottom: '3%',
+      top: '15%',
+      containLabel: true
+    },
+    xAxis: {
+      type: 'category',
+      boundaryGap: false,
+      data: dates,
+      axisLabel: {
+        color: '#606266'
+      }
+    },
+    yAxis: {
+      type: 'value',
+      axisLabel: {
+        color: '#606266'
+      }
+    },
+    series: [
+      {
+        name: '新增投票',
+        type: 'line',
+        smooth: true,
+        data: pollCounts,
+        itemStyle: {
+          color: '#409EFF'
+        },
+        areaStyle: {
+          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            { offset: 0, color: 'rgba(64, 158, 255, 0.3)' },
+            { offset: 1, color: 'rgba(64, 158, 255, 0.05)' }
+          ])
+        },
+        lineStyle: {
+          width: 3
+        }
+      },
+      {
+        name: '投票次数',
+        type: 'line',
+        smooth: true,
+        data: voteCounts,
+        itemStyle: {
+          color: '#67c23a'
+        },
+        areaStyle: {
+          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            { offset: 0, color: 'rgba(103, 194, 58, 0.3)' },
+            { offset: 1, color: 'rgba(103, 194, 58, 0.05)' }
+          ])
+        },
+        lineStyle: {
+          width: 3
+        }
+      }
+    ]
+  }
+
+  trendChart.setOption(option)
+}
+
+function handleResize() {
+  statusChart?.resize()
+  trendChart?.resize()
+}
+
 onMounted(() => {
   loadStats()
+  window.addEventListener('resize', handleResize)
+})
 
-  window.addEventListener('resize', () => {
-    statusChart?.resize()
-  })
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', handleResize)
+  statusChart?.dispose()
+  trendChart?.dispose()
 })
 </script>
 
@@ -253,5 +366,9 @@ onMounted(() => {
 
 .chart {
   height: 300px;
+}
+
+.trend-chart {
+  height: 350px;
 }
 </style>

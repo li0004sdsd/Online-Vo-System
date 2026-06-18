@@ -3,8 +3,7 @@ from django.dispatch import receiver
 from django.contrib.auth.models import User
 from django.utils import timezone
 from .models import Poll, UserActivity
-from .moderation import auto_moderate_poll
-import threading
+from .moderation import submit_moderation_task
 
 
 @receiver(post_save, sender=User)
@@ -16,9 +15,7 @@ def create_user_activity(sender, instance, created, **kwargs):
 @receiver(post_save, sender=Poll)
 def trigger_moderation(sender, instance, created, **kwargs):
     if created and instance.status == Poll.STATUS_PENDING:
-        thread = threading.Thread(target=auto_moderate_poll, args=(instance,))
-        thread.daemon = True
-        thread.start()
+        submit_moderation_task(instance)
 
 
 def update_user_activity(user):

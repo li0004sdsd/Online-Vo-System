@@ -78,10 +78,12 @@ class PollDetailSerializer(serializers.ModelSerializer):
 
 class PollCreateSerializer(serializers.ModelSerializer):
     options = serializers.ListField(child=serializers.CharField(max_length=200), write_only=True)
+    status = serializers.CharField(read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
 
     class Meta:
         model = Poll
-        fields = ['id', 'title', 'description', 'end_time', 'allow_multiple', 'options']
+        fields = ['id', 'title', 'description', 'end_time', 'allow_multiple', 'options', 'status', 'status_display']
         read_only_fields = ['id']
 
     def create(self, validated_data):
@@ -144,4 +146,6 @@ class DashboardStatsSerializer(serializers.Serializer):
     approved_polls = serializers.IntegerField()
     rejected_polls = serializers.IntegerField()
     total_votes = serializers.IntegerField()
+    poll_trend = serializers.ListField()
+    vote_trend = serializers.ListField()
 
