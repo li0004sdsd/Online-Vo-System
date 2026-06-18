@@ -5,6 +5,7 @@ from rest_framework.views import APIView
 from rest_framework.decorators import action
 from django.contrib.auth.models import User
 from django.db.models import Count, Prefetch
+from django.db import transaction
 from django.utils import timezone
 from datetime import timedelta, datetime
 from .models import Poll, Option, Vote, UserActivity
@@ -109,9 +110,12 @@ class VoteView(APIView):
 
     def post(self, request, poll_id):
         try:
-            poll = Poll.objects.get(id=poll_id)
+            poll = Poll.objects.get(id=poll_id, status=Poll.STATUS_APPROVED, is_active=True)
         except Poll.DoesNotExist:
-            return Response({'error': 'Poll not found.'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({'error': 'Poll not found or not available for voting.'}, status=status.HTTP_404_NOT_FOUND)
+
+        if poll.end_time and poll.end_time < timezone.now():
+            return Response({'error': 'This poll has ended.'}, status=status.HTTP_400_BAD_REQUEST)
 
         serializer = VoteCreateSerializer(data=request.data, context={'poll': poll})
         if not serializer.is_valid():
@@ -129,16 +133,24 @@ class VoteView(APIView):
         if len(options) != len(option_ids):
             return Response({'error': 'Invalid option(s).'}, status=status.HTTP_400_BAD_REQUEST)
 
-        existing_votes = Vote.objects.filter(user=request.user, poll=poll)
-        if existing_votes.exists():
-            return Response({'error': 'You have already voted in this poll.'}, status=status.HTTP_400_BAD_REQUEST)
+        with transaction.atomic():
+            existing_votes = Vote.objects.filter(
+                user=request.user, poll=poll
+            ).select_for_update().exists()
+            if existing_votes:
+                return Response({'error': 'You have already voted in this poll.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        votes = []
-        for option in options:
-            vote = Vote(user=request.user, poll=poll, option=option)
-            votes.append(vote)
+            votes = []
+            for option in options:
+                vote = Vote(user=request.user, poll=poll, option=option)
+                if not poll.allow_multiple:
+                    vote.single_vote_key = poll.id
+                votes.append(vote)
 
-        Vote.objects.bulk_create(votes)
+            try:
+                Vote.objects.bulk_create(votes)
+            except Exception as e:
+                return Response({'error': 'Vote submission failed or duplicate vote detected.'}, status=status.HTTP_400_BAD_REQUEST)
 
         poll.refresh_from_db()
         poll.total_votes = Vote.objects.filter(poll=poll).count()
@@ -255,9 +267,6 @@ class AdminDashboardView(APIView):
         active_users = UserActivity.objects.filter(
             last_active__gte=active_threshold
         ).values_list('user_id', flat=True).distinct().count()
-
-        if active_users == 0:
-            active_users = min(total_users, 5)
 
         poll_trend = self._get_poll_trend()
         vote_trend = self._get_vote_trend()
